@@ -69,8 +69,9 @@ def process_images(folder_path):
     not_detectable_folder = os.path.join(folder_path, "Not_detectable")
     os.makedirs(not_detectable_folder, exist_ok=True)
     
-    # Track renamed files and undetected files
+    # Track renamed files and their new names
     renamed_files = set()
+    renamed_files_map = {}  # Maps original filename to new filename
     undetected_files = []
     
     # Walk through all directories and subdirectories
@@ -101,20 +102,9 @@ def process_images(folder_path):
                     prev_base_name = os.path.splitext(prev_filename)[0]
                     print(f"Debug: Comparing prev_base_name: {prev_base_name} with processed barcode: {barcode}")
                     
-                    if prev_filename in renamed_files:
-                        # Previous picture already renamed, rename current picture only
-                        curr_ext = os.path.splitext(filename)[1]
-                        new_curr_name = f"back_{barcode}{curr_ext}"
-                        try:
-                            print(f"Debug: Renaming {filename} to {new_curr_name} (previous file already renamed)")
-                            os.rename(full_path, os.path.join(root, new_curr_name))
-                            renamed_files.add(filename)
-                            print(f"Renamed image: {filename} -> {new_curr_name} "
-                                  f"(Barcode Type: {barcode_type}, Raw Data: {raw_barcode})")
-                        except OSError as e:
-                            print(f"Error renaming file: {str(e)}")
-                    elif prev_base_name != barcode:
-                        # Rename both previous and current pictures
+                    prev_new_name = renamed_files_map.get(prev_filename)
+                    if prev_filename not in renamed_files and prev_base_name != barcode:
+                        # Previous picture not renamed and doesn't match barcode, rename both
                         prev_ext = os.path.splitext(prev_filename)[1]
                         curr_ext = os.path.splitext(filename)[1]
                         new_prev_name = f"{barcode}{prev_ext}"
@@ -126,24 +116,36 @@ def process_images(folder_path):
                             os.rename(full_path, os.path.join(root, new_curr_name))
                             renamed_files.add(prev_filename)
                             renamed_files.add(filename)
+                            renamed_files_map[prev_filename] = new_prev_name
+                            renamed_files_map[filename] = new_curr_name
                             print(f"Renamed front image: {prev_filename} -> {new_prev_name}")
                             print(f"Renamed back image: {filename} -> {new_curr_name} "
                                   f"(Barcode Type: {barcode_type}, Raw Data: {raw_barcode})")
                         except OSError as e:
                             print(f"Error renaming files: {str(e)}")
                     else:
-                        inferred_type = infer_type_from_data(raw_barcode or barcode)
-                        print(f"Debug: Skipping rename - prev_base_name: {prev_base_name}, barcode: {barcode}")
-                        print(f"Skipping rename: {prev_filename} matches or already renamed with barcode {barcode} "
-                              f"(Detected Type: {barcode_type}, Inferred Type: {inferred_type})")
+                        # Previous picture renamed or matches barcode, rename current without "back_"
+                        curr_ext = os.path.splitext(filename)[1]
+                        new_curr_name = f"{barcode}{curr_ext}"
+                        try:
+                            print(f"Debug: Renaming {filename} to {new_curr_name} "
+                                  f"(previous file renamed to {prev_new_name or prev_filename} or matches barcode)")
+                            os.rename(full_path, os.path.join(root, new_curr_name))
+                            renamed_files.add(filename)
+                            renamed_files_map[filename] = new_curr_name
+                            print(f"Renamed image: {filename} -> {new_curr_name} "
+                                  f"(Barcode Type: {barcode_type}, Raw Data: {raw_barcode})")
+                        except OSError as e:
+                            print(f"Error renaming file: {str(e)}")
                 else:
-                    # First image with barcode, rename it alone
+                    # First image with barcode, rename without "back_" prefix
                     curr_ext = os.path.splitext(filename)[1]
                     new_curr_name = f"{barcode}{curr_ext}"
                     try:
                         print(f"Debug: Renaming {filename} to {new_curr_name} (first image with barcode)")
                         os.rename(full_path, os.path.join(root, new_curr_name))
                         renamed_files.add(filename)
+                        renamed_files_map[filename] = new_curr_name
                         print(f"Renamed image: {filename} -> {new_curr_name} "
                               f"(Barcode Type: {barcode_type}, Raw Data: {raw_barcode})")
                     except OSError as e:
